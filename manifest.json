@@ -1,0 +1,7 @@
+{
+	"id": "URLAutoFill",
+	"name": "URLAutoFill",
+	"version": "0.1.0",
+	"description": "Embed websites in Obsidian and automatically fill URLs and login credentials when you open them.",
+	"author": "Sharbel Marshi"
+}
