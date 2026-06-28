@@ -293,11 +293,29 @@ export interface WebviewLayoutOptions {
     deferSrc?: boolean
 }
 
+const FRAME_TAB_CLASS = 'extended-browser-tab-frame'
+const FRAME_FLOATING_CLASS = 'extended-browser-floating-frame'
+const WEBVIEW_INLINE_CLASS = 'extended-browser-webview-inline'
+
+const clearFloatingFrameCssProps = (frameEl: HTMLElement): void => {
+    frameEl.setCssProps({
+        width: '',
+        height: '',
+        minWidth: '',
+        minHeight: '',
+        maxWidth: '',
+        maxHeight: '',
+        flex: '',
+        display: ''
+    })
+}
+
 const applyWebviewLayout = (webviewTag: WebviewTag, layout: WebviewLayoutOptions): void => {
-    webviewTag.style.display = 'inline-flex'
-    webviewTag.style.width = `${layout.width}px`
-    webviewTag.style.height = `${layout.height}px`
-    webviewTag.style.border = 'none'
+    webviewTag.classList.add(WEBVIEW_INLINE_CLASS)
+    ;(webviewTag as unknown as HTMLElement).setCssProps({
+        width: `${layout.width}px`,
+        height: `${layout.height}px`
+    })
     webviewTag.setAttribute('autosize', 'on')
     webviewTag.setAttribute('minwidth', '0')
     webviewTag.setAttribute('minheight', '0')
@@ -312,27 +330,22 @@ export const startWebviewNavigation = (webviewTag: WebviewTag, params: Partial<G
 }
 
 export const applyTabFrameLayout = (frameEl: HTMLElement): void => {
-    frameEl.style.display = ''
-    frameEl.style.width = '100%'
-    frameEl.style.height = '100%'
-    frameEl.style.minWidth = ''
-    frameEl.style.minHeight = ''
-    frameEl.style.maxWidth = ''
-    frameEl.style.maxHeight = ''
-    frameEl.style.border = 'none'
-    frameEl.style.flex = ''
+    frameEl.classList.remove(FRAME_FLOATING_CLASS)
+    frameEl.classList.add(FRAME_TAB_CLASS)
+    clearFloatingFrameCssProps(frameEl)
 }
 
 export const applyFloatingFrameLayout = (frameEl: HTMLElement, width: number, height: number): void => {
-    frameEl.style.display = 'inline-flex'
-    frameEl.style.width = `${width}px`
-    frameEl.style.height = `${height}px`
-    frameEl.style.minWidth = `${width}px`
-    frameEl.style.minHeight = `${height}px`
-    frameEl.style.maxWidth = `${width}px`
-    frameEl.style.maxHeight = `${height}px`
-    frameEl.style.border = 'none'
-    frameEl.style.flex = 'none'
+    frameEl.classList.remove(FRAME_TAB_CLASS)
+    frameEl.classList.add(FRAME_FLOATING_CLASS)
+    frameEl.setCssProps({
+        width: `${width}px`,
+        height: `${height}px`,
+        minWidth: `${width}px`,
+        minHeight: `${height}px`,
+        maxWidth: `${width}px`,
+        maxHeight: `${height}px`
+    })
 }
 
 export const createWebviewTag = (
