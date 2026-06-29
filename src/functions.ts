@@ -348,6 +348,36 @@ export const applyFloatingFrameLayout = (frameEl: HTMLElement, width: number, he
     })
 }
 
+export const resizeFloatingFrame = (frame: WebviewTag | HTMLIFrameElement, width: number, height: number): void => {
+    applyFloatingFrameLayout(frame as unknown as HTMLElement, width, height)
+
+    if (!(frame instanceof HTMLIFrameElement)) {
+        applyWebviewLayout(frame, { width, height })
+    }
+}
+
+export const navigateFrameBack = (frame: WebviewTag | HTMLIFrameElement | null | undefined): boolean => {
+    if (!frame) {
+        return false
+    }
+
+    if (frame instanceof HTMLIFrameElement) {
+        try {
+            frame.contentWindow?.history.back()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    if (frame.canGoBack()) {
+        frame.goBack()
+        return true
+    }
+
+    return false
+}
+
 export const createWebviewTag = (
     params: Partial<GateFrameOption>,
     onReady?: () => void,
@@ -520,16 +550,17 @@ export const openView = async (
             throw new Error('Floating preview requires gate options and a floating preview manager')
         }
 
-        const existingLeaf = workspace.getLeavesOfType(id)[0]
-        if (existingLeaf?.view instanceof GateView) {
-            if (existingLeaf.view.canBorrowFrame()) {
-                await floatingPreview.adoptFromGateViewAndCloseTab(existingLeaf.view)
-                return null
-            }
+        const borrowableView = workspace
+            .getLeavesOfType(id)
+            .map((leaf) => leaf.view)
+            .find((view): view is GateView => view instanceof GateView && view.canBorrowFrame())
 
-            existingLeaf.detach()
+        if (borrowableView) {
+            await floatingPreview.adoptFromGateViewAndCloseTab(borrowableView)
+            return null
         }
 
+        workspace.detachLeavesOfType(id)
         await floatingPreview.show(gate)
         return null
     }
@@ -630,6 +661,14 @@ export class GateView extends ItemView {
     }
 
     addActions(): void {
+        this.addAction('arrow-left', 'Go back', () => {
+            if (!this.frame) {
+                return
+            }
+
+            navigateFrameBack(this.frame)
+        })
+
         this.addAction('refresh-ccw', 'Reload', () => {
             if (!this.frame) {
                 this.createFrame()

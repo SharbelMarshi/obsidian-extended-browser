@@ -131,7 +131,10 @@ export default class ExtendedBrowserPlugin extends Plugin {
 
     async onload() {
         await this.loadSettings()
-        this.floatingPreview = new FloatingPreviewManager((gate) => this.restoreGateToTab(gate))
+        this.floatingPreview = new FloatingPreviewManager(
+            (gate) => this.restoreGateToTab(gate),
+            (gateId) => this.app.workspace.detachLeavesOfType(gateId)
+        )
         this.addSettingTab(new SettingTab(this.app, this))
         await this.mayShowFirstPasskey()
         await this.initGates()
@@ -161,6 +164,26 @@ export default class ExtendedBrowserPlugin extends Plugin {
         }
     }
 
+    private collectOpenGateViews(): GateView[] {
+        const views: GateView[] = []
+
+        for (const gate of Object.values(this.settings.gates)) {
+            for (const leaf of this.app.workspace.getLeavesOfType(gate.id)) {
+                if (leaf.view instanceof GateView) {
+                    views.push(leaf.view)
+                }
+            }
+        }
+
+        for (const leaf of this.app.workspace.getLeavesOfType('temp-gate')) {
+            if (leaf.view instanceof GateView) {
+                views.push(leaf.view)
+            }
+        }
+
+        return views
+    }
+
     private findTargetGateView(): GateView | null {
         const activeView = this.app.workspace.activeLeaf?.view
         if (activeView instanceof GateView) {
@@ -171,20 +194,17 @@ export default class ExtendedBrowserPlugin extends Plugin {
             return this.lastGateView
         }
 
-        for (const gate of Object.values(this.settings.gates)) {
-            for (const leaf of this.app.workspace.getLeavesOfType(gate.id)) {
-                if (leaf.view instanceof GateView) {
-                    return leaf.view
-                }
-            }
+        const openViews = this.collectOpenGateViews()
+        if (openViews.length === 0) {
+            return null
         }
 
-        const tempLeaves = this.app.workspace.getLeavesOfType('temp-gate')
-        if (tempLeaves[0]?.view instanceof GateView) {
-            return tempLeaves[0].view as GateView
+        const borrowableViews = openViews.filter((view) => view.canBorrowFrame())
+        if (borrowableViews.length > 0) {
+            return borrowableViews[0]
         }
 
-        return null
+        return openViews[0]
     }
 
     async restoreGateToTab(gate: GateFrameOption) {
@@ -346,13 +366,15 @@ export default class ExtendedBrowserPlugin extends Plugin {
         const url = data.url ?? targetGate?.url ?? 'about:blank'
 
         if (openMode === 'floating' && targetGate) {
-            const existingLeaf = this.app.workspace.getLeavesOfType(targetGate.id)[0]
-            if (existingLeaf?.view instanceof GateView && existingLeaf.view.canBorrowFrame()) {
-                await this.floatingPreview.adoptFromGateViewAndCloseTab(existingLeaf.view)
+            const borrowableView = this.app.workspace
+                .getLeavesOfType(targetGate.id)
+                .map((leaf) => leaf.view)
+                .find((view): view is GateView => view instanceof GateView && view.canBorrowFrame())
+
+            if (borrowableView) {
+                await this.floatingPreview.adoptFromGateViewAndCloseTab(borrowableView)
             } else {
-                if (existingLeaf?.view instanceof GateView) {
-                    existingLeaf.detach()
-                }
+                this.app.workspace.detachLeavesOfType(targetGate.id)
                 await this.floatingPreview.show(targetGate)
             }
 

@@ -6397,6 +6397,31 @@ var applyFloatingFrameLayout = (frameEl, width, height) => {
     maxHeight: `${height}px`
   });
 };
+var resizeFloatingFrame = (frame, width, height) => {
+  applyFloatingFrameLayout(frame, width, height);
+  if (!(frame instanceof HTMLIFrameElement)) {
+    applyWebviewLayout(frame, { width, height });
+  }
+};
+var navigateFrameBack = (frame) => {
+  var _a;
+  if (!frame) {
+    return false;
+  }
+  if (frame instanceof HTMLIFrameElement) {
+    try {
+      (_a = frame.contentWindow) == null ? void 0 : _a.history.back();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  if (frame.canGoBack()) {
+    frame.goBack();
+    return true;
+  }
+  return false;
+};
 var createWebviewTag = (params, onReady, parentDoc = activeDocument, layout) => {
   var _a;
   const webviewTag = parentDoc.createElement("webview");
@@ -6537,14 +6562,12 @@ var openView = async (workspace, id, position, openMode = "tab", context) => {
     if (!gate || !floatingPreview) {
       throw new Error("Floating preview requires gate options and a floating preview manager");
     }
-    const existingLeaf = workspace.getLeavesOfType(id)[0];
-    if ((existingLeaf == null ? void 0 : existingLeaf.view) instanceof GateView) {
-      if (existingLeaf.view.canBorrowFrame()) {
-        await floatingPreview.adoptFromGateViewAndCloseTab(existingLeaf.view);
-        return null;
-      }
-      existingLeaf.detach();
+    const borrowableView = workspace.getLeavesOfType(id).map((leaf2) => leaf2.view).find((view) => view instanceof GateView && view.canBorrowFrame());
+    if (borrowableView) {
+      await floatingPreview.adoptFromGateViewAndCloseTab(borrowableView);
+      return null;
     }
+    workspace.detachLeavesOfType(id);
     await floatingPreview.show(gate);
     return null;
   }
@@ -6615,6 +6638,12 @@ var GateView = class extends import_obsidian.ItemView {
     this.frameReadyCallbacks = [];
   }
   addActions() {
+    this.addAction("arrow-left", "Go back", () => {
+      if (!this.frame) {
+        return;
+      }
+      navigateFrameBack(this.frame);
+    });
     this.addAction("refresh-ccw", "Reload", () => {
       var _a;
       if (!this.frame) {
@@ -7146,11 +7175,15 @@ var createLinkConvertMenu = (menu, editor) => {
 };
 
 // src/floating-preview.ts
-var FLOATING_PREVIEW_WIDTH = 420;
-var FLOATING_PREVIEW_CONTENT_HEIGHT = 324;
+var FLOATING_PREVIEW_WIDTH = 416;
+var FLOATING_PREVIEW_HEIGHT = 358;
+var FLOATING_PREVIEW_HEADER_HEIGHT = 36;
+var FLOATING_PREVIEW_MIN_WIDTH = 280;
+var FLOATING_PREVIEW_MIN_HEIGHT = 200;
 var FloatingPreviewManager = class {
-  constructor(restoreTab) {
+  constructor(restoreTab, closeGateLeaves) {
     this.restoreTab = restoreTab;
+    this.closeGateLeaves = closeGateLeaves;
     this.rootEl = null;
     this.frameHostEl = null;
     this.titleEl = null;
@@ -7159,6 +7192,8 @@ var FloatingPreviewManager = class {
     this.borrowedFrame = false;
     this.frameReadyCallbacks = [];
     this.isFrameReady = false;
+    this.panelWidth = FLOATING_PREVIEW_WIDTH;
+    this.panelHeight = FLOATING_PREVIEW_HEIGHT;
   }
   isVisible() {
     return this.rootEl !== null && !this.rootEl.classList.contains("is-hidden");
@@ -7196,10 +7231,11 @@ var FloatingPreviewManager = class {
     if (this.isVisible()) {
       await this.restoreToTab();
     }
-    const frame = gateView.borrowFrame();
+    await this.waitForGateFrame(gateView);
     const snapshot = gateView.getSnapshot();
+    const frame = gateView.borrowFrame();
     if (!frame) {
-      gateView.leaf.detach();
+      this.closeGateLeaves(snapshot.id);
       await this.show(snapshot, snapshot.url);
       return;
     }
@@ -7216,10 +7252,11 @@ var FloatingPreviewManager = class {
     if (this.frameHostEl) {
       this.frameHostEl.empty();
       const layout = this.getFrameLayout();
-      applyFloatingFrameLayout(frame, layout.width, layout.height);
+      resizeFloatingFrame(frame, layout.width, layout.height);
       this.frameHostEl.appendChild(frame);
     }
-    gateView.leaf.detach();
+    this.applyPanelSize();
+    this.closeGateLeaves(snapshot.id);
   }
   async show(gate, navigatedUrl) {
     if (this.borrowedFrame) {
@@ -7323,6 +7360,14 @@ var FloatingPreviewManager = class {
     const header = this.rootEl.createDiv({ cls: "extended-browser-floating-preview-header" });
     this.titleEl = header.createDiv({ cls: "extended-browser-floating-preview-title" });
     const actions = header.createDiv({ cls: "extended-browser-floating-preview-actions" });
+    const backBtn = actions.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": "Go back", type: "button" }
+    });
+    (0, import_obsidian2.setIcon)(backBtn, "arrow-left");
+    backBtn.addEventListener("click", () => {
+      navigateFrameBack(this.frame);
+    });
     const reloadBtn = actions.createEl("button", {
       cls: "clickable-icon",
       attr: { "aria-label": "Reload", type: "button" }
@@ -7338,10 +7383,139 @@ var FloatingPreviewManager = class {
       void this.hide();
     });
     this.frameHostEl = this.rootEl.createDiv({ cls: "extended-browser-floating-preview-content" });
+    this.setupDragging(header);
+    this.setupResizing();
+    this.applyPanelSize();
+  }
+  setupDragging(header) {
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+    const onPointerMove = (event) => {
+      if (!dragging || !this.rootEl) {
+        return;
+      }
+      const dx = event.clientX - startX;
+      const dy = event.clientY - startY;
+      this.rootEl.style.left = `${startLeft + dx}px`;
+      this.rootEl.style.top = `${startTop + dy}px`;
+      this.rootEl.style.right = "auto";
+    };
+    const onPointerUp = (event) => {
+      if (!dragging) {
+        return;
+      }
+      dragging = false;
+      header.releasePointerCapture(event.pointerId);
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      header.classList.remove("is-dragging");
+    };
+    header.addEventListener("pointerdown", (event) => {
+      if (!this.rootEl || event.button !== 0) {
+        return;
+      }
+      const target = event.target;
+      if (target.closest("button") || target.closest(".extended-browser-floating-preview-resize")) {
+        return;
+      }
+      dragging = true;
+      const rect = this.rootEl.getBoundingClientRect();
+      startX = event.clientX;
+      startY = event.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+      this.rootEl.style.left = `${startLeft}px`;
+      this.rootEl.style.top = `${startTop}px`;
+      this.rootEl.style.right = "auto";
+      header.setPointerCapture(event.pointerId);
+      header.classList.add("is-dragging");
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
+    });
+  }
+  setupResizing() {
+    if (!this.rootEl) {
+      return;
+    }
+    const edges = ["e", "s", "se"];
+    for (const edge of edges) {
+      const handle = this.rootEl.createDiv({
+        cls: `extended-browser-floating-preview-resize extended-browser-floating-preview-resize-${edge}`
+      });
+      this.bindResizeHandle(handle, edge);
+    }
+  }
+  bindResizeHandle(handle, edge) {
+    let resizing = false;
+    let startX = 0;
+    let startY = 0;
+    let startWidth = 0;
+    let startHeight = 0;
+    const onPointerMove = (event) => {
+      if (!resizing) {
+        return;
+      }
+      const dx = event.clientX - startX;
+      const dy = event.clientY - startY;
+      if (edge === "e" || edge === "se") {
+        this.panelWidth = Math.max(FLOATING_PREVIEW_MIN_WIDTH, startWidth + dx);
+      }
+      if (edge === "s" || edge === "se") {
+        this.panelHeight = Math.max(FLOATING_PREVIEW_MIN_HEIGHT, startHeight + dy);
+      }
+      this.applyPanelSize();
+    };
+    const onPointerUp = (event) => {
+      if (!resizing) {
+        return;
+      }
+      resizing = false;
+      handle.releasePointerCapture(event.pointerId);
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      handle.classList.remove("is-resizing");
+    };
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      resizing = true;
+      startX = event.clientX;
+      startY = event.clientY;
+      startWidth = this.panelWidth;
+      startHeight = this.panelHeight;
+      handle.setPointerCapture(event.pointerId);
+      handle.classList.add("is-resizing");
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
+    });
+  }
+  applyPanelSize() {
+    if (!this.rootEl || !this.frameHostEl) {
+      return;
+    }
+    const layout = this.getFrameLayout();
+    this.rootEl.style.width = `${this.panelWidth}px`;
+    this.rootEl.style.height = `${this.panelHeight}px`;
+    this.frameHostEl.style.height = `${layout.height}px`;
+    if (this.frame) {
+      resizeFloatingFrame(this.frame, layout.width, layout.height);
+    }
+  }
+  async waitForGateFrame(gateView) {
+    gateView.ensureFrame();
+    await new Promise((resolve) => {
+      gateView.onFrameReady(() => resolve());
+    });
   }
   getFrameLayout() {
-    const width = FLOATING_PREVIEW_WIDTH - 2;
-    const height = FLOATING_PREVIEW_CONTENT_HEIGHT;
+    const width = this.panelWidth - 2;
+    const height = this.panelHeight - FLOATING_PREVIEW_HEADER_HEIGHT;
     return { width, height };
   }
   updateTitle(title) {
@@ -7398,6 +7572,7 @@ var FloatingPreviewManager = class {
       this.frame = iframe;
       applyFloatingFrameLayout(this.frame, layout.width, layout.height);
       this.frameHostEl.appendChild(this.frame);
+      this.applyPanelSize();
       return;
     }
     const webview = createWebviewTag(gate, onReady, document, {
@@ -7411,6 +7586,7 @@ var FloatingPreviewManager = class {
     this.frame = webview;
     this.frameHostEl.appendChild(webview);
     startWebviewNavigation(webview, gate);
+    this.applyPanelSize();
   }
 };
 
@@ -7631,7 +7807,7 @@ var ExtendedBrowserPlugin = class extends import_obsidian4.Plugin {
   }
   async onload() {
     await this.loadSettings();
-    this.floatingPreview = new FloatingPreviewManager((gate) => this.restoreGateToTab(gate));
+    this.floatingPreview = new FloatingPreviewManager((gate) => this.restoreGateToTab(gate), (gateId) => this.app.workspace.detachLeavesOfType(gateId));
     this.addSettingTab(new SettingTab(this.app, this));
     await this.mayShowFirstPasskey();
     await this.initGates();
@@ -7655,8 +7831,24 @@ var ExtendedBrowserPlugin = class extends import_obsidian4.Plugin {
       gate
     };
   }
+  collectOpenGateViews() {
+    const views = [];
+    for (const gate of Object.values(this.settings.gates)) {
+      for (const leaf of this.app.workspace.getLeavesOfType(gate.id)) {
+        if (leaf.view instanceof GateView) {
+          views.push(leaf.view);
+        }
+      }
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType("temp-gate")) {
+      if (leaf.view instanceof GateView) {
+        views.push(leaf.view);
+      }
+    }
+    return views;
+  }
   findTargetGateView() {
-    var _a, _b, _c;
+    var _a, _b;
     const activeView = (_a = this.app.workspace.activeLeaf) == null ? void 0 : _a.view;
     if (activeView instanceof GateView) {
       return activeView;
@@ -7664,18 +7856,15 @@ var ExtendedBrowserPlugin = class extends import_obsidian4.Plugin {
     if (((_b = this.lastGateView) == null ? void 0 : _b.leaf) && this.lastGateView.leaf.view === this.lastGateView) {
       return this.lastGateView;
     }
-    for (const gate of Object.values(this.settings.gates)) {
-      for (const leaf of this.app.workspace.getLeavesOfType(gate.id)) {
-        if (leaf.view instanceof GateView) {
-          return leaf.view;
-        }
-      }
+    const openViews = this.collectOpenGateViews();
+    if (openViews.length === 0) {
+      return null;
     }
-    const tempLeaves = this.app.workspace.getLeavesOfType("temp-gate");
-    if (((_c = tempLeaves[0]) == null ? void 0 : _c.view) instanceof GateView) {
-      return tempLeaves[0].view;
+    const borrowableViews = openViews.filter((view) => view.canBorrowFrame());
+    if (borrowableViews.length > 0) {
+      return borrowableViews[0];
     }
-    return null;
+    return openViews[0];
   }
   async restoreGateToTab(gate) {
     return openView(this.app.workspace, gate.id, gate.position, "tab", this.getOpenViewContext(gate));
@@ -7802,13 +7991,11 @@ var ExtendedBrowserPlugin = class extends import_obsidian4.Plugin {
     const openMode = (_a = targetGate == null ? void 0 : targetGate.openMode) != null ? _a : "tab";
     const url = (_c = (_b = data.url) != null ? _b : targetGate == null ? void 0 : targetGate.url) != null ? _c : "about:blank";
     if (openMode === "floating" && targetGate) {
-      const existingLeaf = this.app.workspace.getLeavesOfType(targetGate.id)[0];
-      if ((existingLeaf == null ? void 0 : existingLeaf.view) instanceof GateView && existingLeaf.view.canBorrowFrame()) {
-        await this.floatingPreview.adoptFromGateViewAndCloseTab(existingLeaf.view);
+      const borrowableView = this.app.workspace.getLeavesOfType(targetGate.id).map((leaf2) => leaf2.view).find((view) => view instanceof GateView && view.canBorrowFrame());
+      if (borrowableView) {
+        await this.floatingPreview.adoptFromGateViewAndCloseTab(borrowableView);
       } else {
-        if ((existingLeaf == null ? void 0 : existingLeaf.view) instanceof GateView) {
-          existingLeaf.detach();
-        }
+        this.app.workspace.detachLeavesOfType(targetGate.id);
         await this.floatingPreview.show(targetGate);
       }
       this.floatingPreview.onFrameReady(() => {
