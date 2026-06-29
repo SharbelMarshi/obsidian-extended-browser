@@ -240,7 +240,7 @@ export class FloatingPreviewManager {
     }
 
     private createRoot(): void {
-        this.rootEl = document.body.createDiv({ cls: 'extended-browser-floating-preview is-hidden' })
+        this.rootEl = activeDocument.body.createDiv({ cls: 'extended-browser-floating-preview is-hidden' })
 
         const header = this.rootEl.createDiv({ cls: 'extended-browser-floating-preview-header' })
         this.titleEl = header.createDiv({ cls: 'extended-browser-floating-preview-title' })
@@ -292,9 +292,11 @@ export class FloatingPreviewManager {
 
             const dx = event.clientX - startX
             const dy = event.clientY - startY
-            this.rootEl.style.left = `${startLeft + dx}px`
-            this.rootEl.style.top = `${startTop + dy}px`
-            this.rootEl.style.right = 'auto'
+            this.rootEl.setCssProps({
+                left: `${startLeft + dx}px`,
+                top: `${startTop + dy}px`,
+                right: 'auto'
+            })
         }
 
         const onPointerUp = (event: PointerEvent): void => {
@@ -304,8 +306,8 @@ export class FloatingPreviewManager {
 
             dragging = false
             header.releasePointerCapture(event.pointerId)
-            document.removeEventListener('pointermove', onPointerMove)
-            document.removeEventListener('pointerup', onPointerUp)
+            activeDocument.removeEventListener('pointermove', onPointerMove)
+            activeDocument.removeEventListener('pointerup', onPointerUp)
             header.classList.remove('is-dragging')
         }
 
@@ -325,13 +327,15 @@ export class FloatingPreviewManager {
             startY = event.clientY
             startLeft = rect.left
             startTop = rect.top
-            this.rootEl.style.left = `${startLeft}px`
-            this.rootEl.style.top = `${startTop}px`
-            this.rootEl.style.right = 'auto'
+            this.rootEl.setCssProps({
+                left: `${startLeft}px`,
+                top: `${startTop}px`,
+                right: 'auto'
+            })
             header.setPointerCapture(event.pointerId)
             header.classList.add('is-dragging')
-            document.addEventListener('pointermove', onPointerMove)
-            document.addEventListener('pointerup', onPointerUp)
+            activeDocument.addEventListener('pointermove', onPointerMove)
+            activeDocument.addEventListener('pointerup', onPointerUp)
         })
     }
 
@@ -382,8 +386,8 @@ export class FloatingPreviewManager {
 
             resizing = false
             handle.releasePointerCapture(event.pointerId)
-            document.removeEventListener('pointermove', onPointerMove)
-            document.removeEventListener('pointerup', onPointerUp)
+            activeDocument.removeEventListener('pointermove', onPointerMove)
+            activeDocument.removeEventListener('pointerup', onPointerUp)
             handle.classList.remove('is-resizing')
         }
 
@@ -402,8 +406,8 @@ export class FloatingPreviewManager {
             startHeight = this.panelHeight
             handle.setPointerCapture(event.pointerId)
             handle.classList.add('is-resizing')
-            document.addEventListener('pointermove', onPointerMove)
-            document.addEventListener('pointerup', onPointerUp)
+            activeDocument.addEventListener('pointermove', onPointerMove)
+            activeDocument.addEventListener('pointerup', onPointerUp)
         })
     }
 
@@ -413,9 +417,13 @@ export class FloatingPreviewManager {
         }
 
         const layout = this.getFrameLayout()
-        this.rootEl.style.width = `${this.panelWidth}px`
-        this.rootEl.style.height = `${this.panelHeight}px`
-        this.frameHostEl.style.height = `${layout.height}px`
+        this.rootEl.setCssProps({
+            width: `${this.panelWidth}px`,
+            height: `${this.panelHeight}px`
+        })
+        this.frameHostEl.setCssProps({
+            height: `${layout.height}px`
+        })
 
         if (this.frame) {
             resizeFloatingFrame(this.frame, layout.width, layout.height)
@@ -508,7 +516,7 @@ export class FloatingPreviewManager {
         const webview = createWebviewTag(
             gate,
             onReady,
-            document,
+            activeDocument,
             {
                 width: layout.width,
                 height: layout.height,

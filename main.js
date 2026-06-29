@@ -6579,16 +6579,16 @@ var openView = async (workspace, id, position, openMode = "tab", context) => {
         leaf2.detach();
       } else {
         leaf2.view.ensureFrame();
-        workspace.revealLeaf(leaf2);
+        await workspace.revealLeaf(leaf2);
         return leaf2;
       }
     } else {
-      workspace.revealLeaf(leaf2);
+      await workspace.revealLeaf(leaf2);
       return leaf2;
     }
   }
   const leaf = await createView(workspace, id, position, openMode);
-  workspace.revealLeaf(leaf);
+  await workspace.revealLeaf(leaf);
   return leaf;
 };
 var createView = async (workspace, id, position, openMode = "tab") => {
@@ -6619,7 +6619,7 @@ var unloadView = async (workspace, gate, context) => {
   var _a, _b;
   workspace.detachLeavesOfType(gate.id);
   if (((_a = context == null ? void 0 : context.floatingPreview) == null ? void 0 : _a.getSourceGateId()) === gate.id || ((_b = context == null ? void 0 : context.floatingPreview) == null ? void 0 : _b.getCurrentGateId()) === gate.id) {
-    context.floatingPreview.hide();
+    void context.floatingPreview.hide();
   }
   const ribbonIcons = workspace.containerEl.querySelector(`div[aria-label="${gate.title}"]`);
   if (ribbonIcons) {
@@ -7356,7 +7356,7 @@ var FloatingPreviewManager = class {
     this.clearCreatedFrame();
   }
   createRoot() {
-    this.rootEl = document.body.createDiv({ cls: "extended-browser-floating-preview is-hidden" });
+    this.rootEl = activeDocument.body.createDiv({ cls: "extended-browser-floating-preview is-hidden" });
     const header = this.rootEl.createDiv({ cls: "extended-browser-floating-preview-header" });
     this.titleEl = header.createDiv({ cls: "extended-browser-floating-preview-title" });
     const actions = header.createDiv({ cls: "extended-browser-floating-preview-actions" });
@@ -7399,9 +7399,11 @@ var FloatingPreviewManager = class {
       }
       const dx = event.clientX - startX;
       const dy = event.clientY - startY;
-      this.rootEl.style.left = `${startLeft + dx}px`;
-      this.rootEl.style.top = `${startTop + dy}px`;
-      this.rootEl.style.right = "auto";
+      this.rootEl.setCssProps({
+        left: `${startLeft + dx}px`,
+        top: `${startTop + dy}px`,
+        right: "auto"
+      });
     };
     const onPointerUp = (event) => {
       if (!dragging) {
@@ -7409,8 +7411,8 @@ var FloatingPreviewManager = class {
       }
       dragging = false;
       header.releasePointerCapture(event.pointerId);
-      document.removeEventListener("pointermove", onPointerMove);
-      document.removeEventListener("pointerup", onPointerUp);
+      activeDocument.removeEventListener("pointermove", onPointerMove);
+      activeDocument.removeEventListener("pointerup", onPointerUp);
       header.classList.remove("is-dragging");
     };
     header.addEventListener("pointerdown", (event) => {
@@ -7427,13 +7429,15 @@ var FloatingPreviewManager = class {
       startY = event.clientY;
       startLeft = rect.left;
       startTop = rect.top;
-      this.rootEl.style.left = `${startLeft}px`;
-      this.rootEl.style.top = `${startTop}px`;
-      this.rootEl.style.right = "auto";
+      this.rootEl.setCssProps({
+        left: `${startLeft}px`,
+        top: `${startTop}px`,
+        right: "auto"
+      });
       header.setPointerCapture(event.pointerId);
       header.classList.add("is-dragging");
-      document.addEventListener("pointermove", onPointerMove);
-      document.addEventListener("pointerup", onPointerUp);
+      activeDocument.addEventListener("pointermove", onPointerMove);
+      activeDocument.addEventListener("pointerup", onPointerUp);
     });
   }
   setupResizing() {
@@ -7474,8 +7478,8 @@ var FloatingPreviewManager = class {
       }
       resizing = false;
       handle.releasePointerCapture(event.pointerId);
-      document.removeEventListener("pointermove", onPointerMove);
-      document.removeEventListener("pointerup", onPointerUp);
+      activeDocument.removeEventListener("pointermove", onPointerMove);
+      activeDocument.removeEventListener("pointerup", onPointerUp);
       handle.classList.remove("is-resizing");
     };
     handle.addEventListener("pointerdown", (event) => {
@@ -7491,8 +7495,8 @@ var FloatingPreviewManager = class {
       startHeight = this.panelHeight;
       handle.setPointerCapture(event.pointerId);
       handle.classList.add("is-resizing");
-      document.addEventListener("pointermove", onPointerMove);
-      document.addEventListener("pointerup", onPointerUp);
+      activeDocument.addEventListener("pointermove", onPointerMove);
+      activeDocument.addEventListener("pointerup", onPointerUp);
     });
   }
   applyPanelSize() {
@@ -7500,9 +7504,13 @@ var FloatingPreviewManager = class {
       return;
     }
     const layout = this.getFrameLayout();
-    this.rootEl.style.width = `${this.panelWidth}px`;
-    this.rootEl.style.height = `${this.panelHeight}px`;
-    this.frameHostEl.style.height = `${layout.height}px`;
+    this.rootEl.setCssProps({
+      width: `${this.panelWidth}px`,
+      height: `${this.panelHeight}px`
+    });
+    this.frameHostEl.setCssProps({
+      height: `${layout.height}px`
+    });
     if (this.frame) {
       resizeFloatingFrame(this.frame, layout.width, layout.height);
     }
@@ -7575,7 +7583,7 @@ var FloatingPreviewManager = class {
       this.applyPanelSize();
       return;
     }
-    const webview = createWebviewTag(gate, onReady, document, {
+    const webview = createWebviewTag(gate, onReady, activeDocument, {
       width: layout.width,
       height: layout.height,
       deferSrc: true

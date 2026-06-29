@@ -574,17 +574,17 @@ export const openView = async (
                 leaf.detach()
             } else {
                 leaf.view.ensureFrame()
-                workspace.revealLeaf(leaf)
+                await workspace.revealLeaf(leaf)
                 return leaf
             }
         } else {
-            workspace.revealLeaf(leaf)
+            await workspace.revealLeaf(leaf)
             return leaf
         }
     }
 
     const leaf = await createView(workspace, id, position, openMode)
-    workspace.revealLeaf(leaf)
+    await workspace.revealLeaf(leaf)
     return leaf
 }
 
@@ -634,7 +634,7 @@ export const unloadView = async (
     workspace.detachLeavesOfType(gate.id)
 
     if (context?.floatingPreview?.getSourceGateId() === gate.id || context?.floatingPreview?.getCurrentGateId() === gate.id) {
-        context.floatingPreview.hide()
+        void context.floatingPreview.hide()
     }
 
     const ribbonIcons = workspace.containerEl.querySelector(`div[aria-label="${gate.title}"]`)
@@ -1254,7 +1254,7 @@ function processNewSyntax(plugin: CodeBlockProcessorPlugin, sourceCode: string, 
     }
 
     try {
-        const parsed = parse(sourceCode)
+        const parsed: unknown = parse(sourceCode)
         if (!isRecord(parsed)) {
             return createErrorMessage(undefined, ownerDoc)
         }
