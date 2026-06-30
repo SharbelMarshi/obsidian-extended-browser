@@ -34,6 +34,8 @@ export class FloatingPreviewManager {
     private isFrameReady = false
     private panelWidth = FLOATING_PREVIEW_WIDTH
     private panelHeight = FLOATING_PREVIEW_HEIGHT
+    private backBtn: HTMLButtonElement | null = null
+    private detachNavigationListeners: (() => void) | null = null
 
     constructor(
         private readonly restoreTab: RestoreTabCallback,
@@ -99,7 +101,7 @@ export class FloatingPreviewManager {
         }
 
         this.borrowedFrame = true
-        this.frame = frame
+        this.setFrame(frame)
         this.currentGate = snapshot
         this.isFrameReady = true
         this.frameReadyCallbacks = []
@@ -163,7 +165,7 @@ export class FloatingPreviewManager {
 
         setPendingFrameRestore(gateId, frame)
         this.borrowedFrame = false
-        this.frame = null
+        this.setFrame(null)
         this.isFrameReady = false
         this.frameReadyCallbacks = []
 
@@ -225,6 +227,8 @@ export class FloatingPreviewManager {
         this.rootEl = null
         this.frameHostEl = null
         this.titleEl = null
+        this.backBtn = null
+        this.detachFrameNavigationListeners()
         this.frame = null
         this.currentGate = null
         this.frameReadyCallbacks = []
@@ -242,17 +246,19 @@ export class FloatingPreviewManager {
     private createRoot(): void {
         this.rootEl = activeDocument.body.createDiv({ cls: 'extended-browser-floating-preview is-hidden' })
 
-        const header = this.rootEl.createDiv({ cls: 'extended-browser-floating-preview-header' })
+        const toolbarZone = this.rootEl.createDiv({ cls: 'extended-browser-floating-preview-toolbar-zone' })
+        const header = toolbarZone.createDiv({ cls: 'extended-browser-floating-preview-header' })
         this.titleEl = header.createDiv({ cls: 'extended-browser-floating-preview-title' })
 
         const actions = header.createDiv({ cls: 'extended-browser-floating-preview-actions' })
 
-        const backBtn = actions.createEl('button', {
+        this.backBtn = actions.createEl('button', {
             cls: 'clickable-icon',
             attr: { 'aria-label': 'Go back', type: 'button' }
         })
-        setIcon(backBtn, 'arrow-left')
-        backBtn.addEventListener('click', () => {
+        setIcon(this.backBtn, 'arrow-left')
+        this.backBtn.addEventListener('mousedown', (event) => {
+            event.preventDefault()
             navigateFrameBack(this.frame)
         })
 
@@ -261,7 +267,10 @@ export class FloatingPreviewManager {
             attr: { 'aria-label': 'Reload', type: 'button' }
         })
         setIcon(reloadBtn, 'refresh-ccw')
-        reloadBtn.addEventListener('click', () => this.reload())
+        reloadBtn.addEventListener('mousedown', (event) => {
+            event.preventDefault()
+            this.reload()
+        })
 
         const closeBtn = actions.createEl('button', {
             cls: 'clickable-icon',
@@ -430,6 +439,17 @@ export class FloatingPreviewManager {
         }
     }
 
+    private setFrame(frame: WebviewTag | HTMLIFrameElement | null): void {
+        this.detachFrameNavigationListeners()
+        this.frame = frame
+
+        if (frame) {
+            this.attachFrameNavigationListeners(frame)
+        } else {
+            this.updateBackButtonState()
+        }
+    }
+
     private async waitForGateFrame(gateView: GateView): Promise<void> {
         gateView.ensureFrame()
         await new Promise<void>((resolve) => {
@@ -439,8 +459,65 @@ export class FloatingPreviewManager {
 
     private getFrameLayout(): { width: number; height: number } {
         const width = this.panelWidth - 2
-        const height = this.panelHeight - FLOATING_PREVIEW_HEADER_HEIGHT
+        const height = this.panelHeight - 2
         return { width, height }
+    }
+
+    private canFrameGoBack(): boolean {
+        if (!this.frame) {
+            return false
+        }
+
+        if (this.frame instanceof HTMLIFrameElement) {
+            try {
+                return (this.frame.contentWindow?.history.length ?? 0) > 1
+            } catch {
+                return false
+            }
+        }
+
+        return this.frame.canGoBack()
+    }
+
+    private updateBackButtonState(): void {
+        if (!this.backBtn) {
+            return
+        }
+
+        const canGoBack = this.canFrameGoBack()
+        this.backBtn.toggleClass('is-disabled', !canGoBack)
+        this.backBtn.setAttr('aria-disabled', canGoBack ? 'false' : 'true')
+    }
+
+    private attachFrameNavigationListeners(frame: WebviewTag | HTMLIFrameElement): void {
+        this.detachFrameNavigationListeners()
+
+        const updateBackButton = (): void => {
+            this.updateBackButtonState()
+        }
+
+        if (frame instanceof HTMLIFrameElement) {
+            frame.addEventListener('load', updateBackButton)
+            this.detachNavigationListeners = () => {
+                frame.removeEventListener('load', updateBackButton)
+            }
+        } else {
+            frame.addEventListener('did-navigate', updateBackButton)
+            frame.addEventListener('did-navigate-in-page', updateBackButton)
+            frame.addEventListener('did-frame-navigate', updateBackButton)
+            this.detachNavigationListeners = () => {
+                frame.removeEventListener('did-navigate', updateBackButton)
+                frame.removeEventListener('did-navigate-in-page', updateBackButton)
+                frame.removeEventListener('did-frame-navigate', updateBackButton)
+            }
+        }
+
+        updateBackButton()
+    }
+
+    private detachFrameNavigationListeners(): void {
+        this.detachNavigationListeners?.()
+        this.detachNavigationListeners = null
     }
 
     private updateTitle(title: string): void {
@@ -474,7 +551,7 @@ export class FloatingPreviewManager {
             this.frame.remove()
         }
 
-        this.frame = null
+        this.setFrame(null)
         this.isFrameReady = false
         this.frameReadyCallbacks = []
 
@@ -506,7 +583,7 @@ export class FloatingPreviewManager {
                 return
             }
 
-            this.frame = iframe
+            this.setFrame(iframe)
             applyFloatingFrameLayout(this.frame as unknown as HTMLElement, layout.width, layout.height)
             this.frameHostEl.appendChild(this.frame as unknown as HTMLElement)
             this.applyPanelSize()
@@ -528,7 +605,7 @@ export class FloatingPreviewManager {
             return
         }
 
-        this.frame = webview
+        this.setFrame(webview)
         this.frameHostEl.appendChild(webview as unknown as HTMLElement)
         startWebviewNavigation(webview, gate)
         this.applyPanelSize()

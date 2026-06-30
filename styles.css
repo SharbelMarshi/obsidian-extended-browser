@@ -165,6 +165,7 @@ div[data-gate-id] .setting-item-name {
 }
 
 .extended-browser-floating-preview {
+    --extended-browser-floating-radius: 20px;
     position: fixed;
     top: 12px;
     right: 12px;
@@ -174,7 +175,7 @@ div[data-gate-id] .setting-item-name {
     display: flex;
     flex-direction: column;
     border: 1px solid var(--background-modifier-border);
-    border-radius: 8px;
+    border-radius: var(--extended-browser-floating-radius);
     box-shadow: var(--shadow-s);
     background: var(--background-primary);
     overflow: hidden;
@@ -184,17 +185,44 @@ div[data-gate-id] .setting-item-name {
     display: none;
 }
 
+.extended-browser-floating-preview-toolbar-zone {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 44px;
+    z-index: 3;
+    pointer-events: auto;
+}
+
 .extended-browser-floating-preview-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 4px 8px;
-    border-bottom: 1px solid var(--background-modifier-border);
-    background: var(--background-secondary);
     min-height: 36px;
     flex: none;
     cursor: grab;
     user-select: none;
+    border-bottom: 1px solid var(--background-modifier-border);
+    border-radius: var(--extended-browser-floating-radius) var(--extended-browser-floating-radius) 0 0;
+    background: color-mix(in srgb, var(--background-primary) 65%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-6px);
+    transition:
+        opacity 150ms ease,
+        transform 150ms ease;
+}
+
+.extended-browser-floating-preview-toolbar-zone:hover .extended-browser-floating-preview-header,
+.extended-browser-floating-preview-toolbar-zone:focus-within .extended-browser-floating-preview-header,
+.extended-browser-floating-preview-header.is-dragging {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
 }
 
 .extended-browser-floating-preview-header.is-dragging {
@@ -208,6 +236,7 @@ div[data-gate-id] .setting-item-name {
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
+    color: var(--text-normal);
 }
 
 .extended-browser-floating-preview-actions {
@@ -217,10 +246,24 @@ div[data-gate-id] .setting-item-name {
     flex: none;
 }
 
+.extended-browser-floating-preview-actions .clickable-icon {
+    color: var(--text-muted);
+}
+
+.extended-browser-floating-preview-actions .clickable-icon:hover:not(.is-disabled) {
+    color: var(--text-normal);
+}
+
+.extended-browser-floating-preview-actions .clickable-icon.is-disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
 .extended-browser-floating-preview-content {
     width: 100%;
     flex: 1;
     min-height: 0;
+    height: 100%;
     overflow: hidden;
     background-color: #fff;
     padding: 0;
@@ -228,6 +271,7 @@ div[data-gate-id] .setting-item-name {
     display: flex;
     align-items: stretch;
     justify-content: stretch;
+    border-radius: var(--extended-browser-floating-radius);
 }
 
 .extended-browser-floating-preview-content .extended-browser-iframe,
@@ -236,6 +280,7 @@ div[data-gate-id] .setting-item-name {
     border: none;
     background-color: #fff;
     flex: none;
+    border-radius: var(--extended-browser-floating-radius);
 }
 
 .extended-browser-floating-preview-resize {

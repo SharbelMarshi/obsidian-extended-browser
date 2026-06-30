@@ -7177,7 +7177,6 @@ var createLinkConvertMenu = (menu, editor) => {
 // src/floating-preview.ts
 var FLOATING_PREVIEW_WIDTH = 416;
 var FLOATING_PREVIEW_HEIGHT = 358;
-var FLOATING_PREVIEW_HEADER_HEIGHT = 36;
 var FLOATING_PREVIEW_MIN_WIDTH = 280;
 var FLOATING_PREVIEW_MIN_HEIGHT = 200;
 var FloatingPreviewManager = class {
@@ -7194,6 +7193,8 @@ var FloatingPreviewManager = class {
     this.isFrameReady = false;
     this.panelWidth = FLOATING_PREVIEW_WIDTH;
     this.panelHeight = FLOATING_PREVIEW_HEIGHT;
+    this.backBtn = null;
+    this.detachNavigationListeners = null;
   }
   isVisible() {
     return this.rootEl !== null && !this.rootEl.classList.contains("is-hidden");
@@ -7243,7 +7244,7 @@ var FloatingPreviewManager = class {
       this.createRoot();
     }
     this.borrowedFrame = true;
-    this.frame = frame;
+    this.setFrame(frame);
     this.currentGate = snapshot;
     this.isFrameReady = true;
     this.frameReadyCallbacks = [];
@@ -7294,7 +7295,7 @@ var FloatingPreviewManager = class {
     }
     setPendingFrameRestore(gateId, frame);
     this.borrowedFrame = false;
-    this.frame = null;
+    this.setFrame(null);
     this.isFrameReady = false;
     this.frameReadyCallbacks = [];
     await this.restoreTab(gate);
@@ -7344,6 +7345,8 @@ var FloatingPreviewManager = class {
     this.rootEl = null;
     this.frameHostEl = null;
     this.titleEl = null;
+    this.backBtn = null;
+    this.detachFrameNavigationListeners();
     this.frame = null;
     this.currentGate = null;
     this.frameReadyCallbacks = [];
@@ -7357,15 +7360,17 @@ var FloatingPreviewManager = class {
   }
   createRoot() {
     this.rootEl = activeDocument.body.createDiv({ cls: "extended-browser-floating-preview is-hidden" });
-    const header = this.rootEl.createDiv({ cls: "extended-browser-floating-preview-header" });
+    const toolbarZone = this.rootEl.createDiv({ cls: "extended-browser-floating-preview-toolbar-zone" });
+    const header = toolbarZone.createDiv({ cls: "extended-browser-floating-preview-header" });
     this.titleEl = header.createDiv({ cls: "extended-browser-floating-preview-title" });
     const actions = header.createDiv({ cls: "extended-browser-floating-preview-actions" });
-    const backBtn = actions.createEl("button", {
+    this.backBtn = actions.createEl("button", {
       cls: "clickable-icon",
       attr: { "aria-label": "Go back", type: "button" }
     });
-    (0, import_obsidian2.setIcon)(backBtn, "arrow-left");
-    backBtn.addEventListener("click", () => {
+    (0, import_obsidian2.setIcon)(this.backBtn, "arrow-left");
+    this.backBtn.addEventListener("mousedown", (event) => {
+      event.preventDefault();
       navigateFrameBack(this.frame);
     });
     const reloadBtn = actions.createEl("button", {
@@ -7373,7 +7378,10 @@ var FloatingPreviewManager = class {
       attr: { "aria-label": "Reload", type: "button" }
     });
     (0, import_obsidian2.setIcon)(reloadBtn, "refresh-ccw");
-    reloadBtn.addEventListener("click", () => this.reload());
+    reloadBtn.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      this.reload();
+    });
     const closeBtn = actions.createEl("button", {
       cls: "clickable-icon",
       attr: { "aria-label": "Close", type: "button" }
@@ -7515,6 +7523,15 @@ var FloatingPreviewManager = class {
       resizeFloatingFrame(this.frame, layout.width, layout.height);
     }
   }
+  setFrame(frame) {
+    this.detachFrameNavigationListeners();
+    this.frame = frame;
+    if (frame) {
+      this.attachFrameNavigationListeners(frame);
+    } else {
+      this.updateBackButtonState();
+    }
+  }
   async waitForGateFrame(gateView) {
     gateView.ensureFrame();
     await new Promise((resolve) => {
@@ -7523,8 +7540,57 @@ var FloatingPreviewManager = class {
   }
   getFrameLayout() {
     const width = this.panelWidth - 2;
-    const height = this.panelHeight - FLOATING_PREVIEW_HEADER_HEIGHT;
+    const height = this.panelHeight - 2;
     return { width, height };
+  }
+  canFrameGoBack() {
+    var _a, _b;
+    if (!this.frame) {
+      return false;
+    }
+    if (this.frame instanceof HTMLIFrameElement) {
+      try {
+        return ((_b = (_a = this.frame.contentWindow) == null ? void 0 : _a.history.length) != null ? _b : 0) > 1;
+      } catch (e) {
+        return false;
+      }
+    }
+    return this.frame.canGoBack();
+  }
+  updateBackButtonState() {
+    if (!this.backBtn) {
+      return;
+    }
+    const canGoBack = this.canFrameGoBack();
+    this.backBtn.toggleClass("is-disabled", !canGoBack);
+    this.backBtn.setAttr("aria-disabled", canGoBack ? "false" : "true");
+  }
+  attachFrameNavigationListeners(frame) {
+    this.detachFrameNavigationListeners();
+    const updateBackButton = () => {
+      this.updateBackButtonState();
+    };
+    if (frame instanceof HTMLIFrameElement) {
+      frame.addEventListener("load", updateBackButton);
+      this.detachNavigationListeners = () => {
+        frame.removeEventListener("load", updateBackButton);
+      };
+    } else {
+      frame.addEventListener("did-navigate", updateBackButton);
+      frame.addEventListener("did-navigate-in-page", updateBackButton);
+      frame.addEventListener("did-frame-navigate", updateBackButton);
+      this.detachNavigationListeners = () => {
+        frame.removeEventListener("did-navigate", updateBackButton);
+        frame.removeEventListener("did-navigate-in-page", updateBackButton);
+        frame.removeEventListener("did-frame-navigate", updateBackButton);
+      };
+    }
+    updateBackButton();
+  }
+  detachFrameNavigationListeners() {
+    var _a;
+    (_a = this.detachNavigationListeners) == null ? void 0 : _a.call(this);
+    this.detachNavigationListeners = null;
   }
   updateTitle(title) {
     if (this.titleEl) {
@@ -7552,7 +7618,7 @@ var FloatingPreviewManager = class {
     if (this.frame) {
       this.frame.remove();
     }
-    this.frame = null;
+    this.setFrame(null);
     this.isFrameReady = false;
     this.frameReadyCallbacks = [];
     if (this.frameHostEl) {
@@ -7577,7 +7643,7 @@ var FloatingPreviewManager = class {
       if (!iframe) {
         return;
       }
-      this.frame = iframe;
+      this.setFrame(iframe);
       applyFloatingFrameLayout(this.frame, layout.width, layout.height);
       this.frameHostEl.appendChild(this.frame);
       this.applyPanelSize();
@@ -7591,7 +7657,7 @@ var FloatingPreviewManager = class {
     if (!webview) {
       return;
     }
-    this.frame = webview;
+    this.setFrame(webview);
     this.frameHostEl.appendChild(webview);
     startWebviewNavigation(webview, gate);
     this.applyPanelSize();
