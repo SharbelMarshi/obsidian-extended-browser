@@ -9,13 +9,6 @@ Extended Browser embeds websites in the app and can fill configured URL login fi
 - Optional automatic sign-in using configured username and password field names
 - Insert gate links in notes and open sites from the command palette or ribbon
 
-## Manual installation
-
-1. Download the latest release (`main.js`, `manifest.json`, and `styles.css`).
-2. Create a folder named `extended-browser` inside your vault's `.obsidian/plugins/` directory.
-3. Copy the three files into that folder.
-4. Enable **Extended Browser** under **Settings → Community plugins**.
-
 ## Usage
 
 1. Open **Settings → Extended Browser** and click **New passkey**.
@@ -30,18 +23,6 @@ When enabled for a passkey, Extended Browser submits the configured username and
 
 Some sites use non-standard field names; adjust the advanced username and password field names if needed.
 
-### Google Drive and Docs
-
-Google sign-in inside embedded browsers is blocked by Google. This plugin supports Google through the official Google API. Create a **Desktop app** OAuth client in [Google Cloud Console](https://console.cloud.google.com/), enable the Google Drive API, and paste the Client ID into plugin settings. The default redirect URI is `http://127.0.0.1:42813/` (if you use a Web application client instead, register that exact redirect URI and add your Client Secret in settings). Connect your account once; after that, Google Drive/Docs previews can open inside Obsidian via **Open Google Drive Browser** in the command palette.
-
-The OAuth consent page opens externally once during setup (required by Google). Drive read-only scope is requested by default.
-
-### YouTube Account Browser
-
-YouTube uses the official YouTube Data API. Sign-in opens once in the system browser because Google blocks embedded sign-in. After connection, search, subscriptions, playlists, channel content, and video playback open inside Obsidian.
-
-Create a **Desktop app** OAuth client in Google Cloud Console, enable **YouTube Data API v3**, and register redirect URI `http://127.0.0.1:42814/youtube-oauth2callback`. Use **Open YouTube Account Browser** in the command palette after connecting.
-
 ### Gate links
 
 Use the editor menu to insert a gate link, or convert an existing link to a gate link. Gate links open the configured site through Extended Browser.
@@ -51,29 +32,6 @@ Use the editor menu to insert a gate link, or convert an existing link to a gate
 Passkey data (URLs, usernames, and passwords) is stored locally in the plugin settings file inside your vault. It is not sent to a remote service by this plugin.
 
 Do not use Extended Browser for high-security credentials unless you understand the risk. Embedded pages run in a webview and local settings are not encrypted by default.
-
-## Development
-
-Requirements: Node.js and npm.
-
-```bash
-npm install
-npm run build
-```
-
-For development with automatic rebuilds:
-
-```bash
-npm run dev
-```
-
-Copy `main.js`, `manifest.json`, and `styles.css` into your test vault's `.obsidian/plugins/extended-browser/` folder, then reload the plugin or restart the app.
-
-Run tests:
-
-```bash
-npm test
-```
 
 ## License
 
