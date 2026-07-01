@@ -535,8 +535,35 @@ export const createWebviewTag = (
     return webviewTag
 }
 
+const isLeafInRightSidebar = (workspace: Workspace, leaf: WorkspaceLeaf): boolean => {
+    const rightSplit = workspace.rightSplit
+    const desktopParent = leaf.parent?.parent
+
+    if (desktopParent === rightSplit) {
+        return true
+    }
+
+    const mobileParent = leaf.parent
+    return mobileParent === rightSplit
+}
+
+const expandRightSidebar = (workspace: Workspace): void => {
+    const rightSplit = workspace.rightSplit as Workspace['rightSplit'] & {
+        collapsed?: boolean
+        expand?: () => void
+    }
+
+    if (rightSplit.collapsed && typeof rightSplit.expand === 'function') {
+        rightSplit.expand()
+    }
+}
+
 const activateLeaf = (workspace: Workspace, leaf: WorkspaceLeaf): void => {
     workspace.setActiveLeaf(leaf, { focus: true })
+
+    if (isLeafInRightSidebar(workspace, leaf)) {
+        expandRightSidebar(workspace)
+    }
 }
 
 export const openView = async (

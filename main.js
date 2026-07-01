@@ -6131,9 +6131,13 @@ function resolveWebviewUserAgent(siteUrl, customUserAgent) {
   return getChromeUserAgent();
 }
 function prepareWebviewSession(profileKey, customUserAgent) {
+  var _a, _b;
   const partition = `persist:${profileKey}`;
   const resolvedUserAgent = resolveWebviewUserAgent(void 0, customUserAgent);
-  const webviewSession = import_electron.session.fromPartition(partition);
+  const webviewSession = (_b = (_a = import_electron.session) == null ? void 0 : _a.fromPartition) == null ? void 0 : _b.call(_a, partition);
+  if (!webviewSession) {
+    return;
+  }
   webviewSession.setUserAgent(resolvedUserAgent);
   if (configuredPartitions.has(partition)) {
     return;
@@ -6558,8 +6562,27 @@ var createWebviewTag = (params, onReady, parentDoc = activeDocument, layout) => 
   });
   return webviewTag;
 };
+var isLeafInRightSidebar = (workspace, leaf) => {
+  var _a;
+  const rightSplit = workspace.rightSplit;
+  const desktopParent = (_a = leaf.parent) == null ? void 0 : _a.parent;
+  if (desktopParent === rightSplit) {
+    return true;
+  }
+  const mobileParent = leaf.parent;
+  return mobileParent === rightSplit;
+};
+var expandRightSidebar = (workspace) => {
+  const rightSplit = workspace.rightSplit;
+  if (rightSplit.collapsed && typeof rightSplit.expand === "function") {
+    rightSplit.expand();
+  }
+};
 var activateLeaf = (workspace, leaf) => {
   workspace.setActiveLeaf(leaf, { focus: true });
+  if (isLeafInRightSidebar(workspace, leaf)) {
+    expandRightSidebar(workspace);
+  }
 };
 var openView = async (workspace, id, position, openMode = "tab", context) => {
   if (openMode === "floating") {

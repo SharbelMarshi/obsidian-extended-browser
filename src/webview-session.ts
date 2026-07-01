@@ -29,7 +29,11 @@ export function resolveWebviewUserAgent(siteUrl?: string, customUserAgent?: stri
 export function prepareWebviewSession(profileKey: string, customUserAgent?: string): void {
     const partition = `persist:${profileKey}`
     const resolvedUserAgent = resolveWebviewUserAgent(undefined, customUserAgent)
-    const webviewSession = session.fromPartition(partition)
+
+    const webviewSession = session?.fromPartition?.(partition)
+    if (!webviewSession) {
+        return
+    }
 
     webviewSession.setUserAgent(resolvedUserAgent)
 
