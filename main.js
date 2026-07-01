@@ -6558,13 +6558,8 @@ var createWebviewTag = (params, onReady, parentDoc = activeDocument, layout) => 
   });
   return webviewTag;
 };
-var revealLeafCompat = async (workspace, leaf) => {
-  const revealLeaf = workspace.revealLeaf;
-  if (typeof revealLeaf === "function") {
-    await revealLeaf.call(workspace, leaf);
-    return;
-  }
-  workspace.setActiveLeaf(leaf, false, true);
+var activateLeaf = (workspace, leaf) => {
+  workspace.setActiveLeaf(leaf, { focus: true });
 };
 var openView = async (workspace, id, position, openMode = "tab", context) => {
   if (openMode === "floating") {
@@ -6590,16 +6585,16 @@ var openView = async (workspace, id, position, openMode = "tab", context) => {
         leaf2.detach();
       } else {
         leaf2.view.ensureFrame();
-        await revealLeafCompat(workspace, leaf2);
+        activateLeaf(workspace, leaf2);
         return leaf2;
       }
     } else {
-      await revealLeafCompat(workspace, leaf2);
+      activateLeaf(workspace, leaf2);
       return leaf2;
     }
   }
   const leaf = await createView(workspace, id, position, openMode);
-  await revealLeafCompat(workspace, leaf);
+  activateLeaf(workspace, leaf);
   return leaf;
 };
 var createView = async (workspace, id, position, openMode = "tab") => {
